@@ -21,7 +21,7 @@ import {
   MultimodalLiveResponseType,
   FunctionCallDefinition,
 } from "../lib/gemini-live/geminilive.js";
-import { AudioStreamer, AudioPlayer } from "../lib/gemini-live/mediaUtils.js";
+import { AudioStreamer, AudioPlayer, VideoStreamer } from "../lib/gemini-live/mediaUtils.js";
 
 class ViewChat extends HTMLElement {
   constructor() {
@@ -52,6 +52,7 @@ class ViewChat extends HTMLElement {
 
   disconnectedCallback() {
     if (this.audioStreamer) this.audioStreamer.stop();
+    if (this.videoStreamer) this.videoStreamer.stop();
     if (this.client) this.client.disconnect();
   }
 
@@ -80,7 +81,22 @@ class ViewChat extends HTMLElement {
 
       <div class="container" style="justify-content: space-between; min-height: 100vh; position: relative; padding-bottom: var(--spacing-xl);">
         
-       
+        <!-- Webcam PiP -->
+        <video id="webcam-pip" autoplay playsinline muted style="
+          display: none;
+          position: fixed;
+          bottom: 24px;
+          right: 24px;
+          width: 160px;
+          height: 120px;
+          border-radius: 12px;
+          object-fit: cover;
+          border: 2px solid rgba(255,255,255,0.15);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+          z-index: 15;
+          transform: scaleX(-1); /* mirror flip so it feels natural */
+        "></video>
+
 
         <div style="margin-top: var(--spacing-xl); text-align: center;">
           <h2 style="font-size: 1.5rem; margin-bottom: 2px;">${this._mission.target_role || "Target Person"
@@ -301,6 +317,7 @@ class ViewChat extends HTMLElement {
     const doEndSession = () => {
       // Cleanup Gemini session
       if (this.audioStreamer) this.audioStreamer.stop();
+      if (this.videoStreamer) this.videoStreamer.stop();
       if (this.client) this.client.disconnect();
       if (this.audioPlayer) this.audioPlayer.interrupt(); // Stop playback
 
@@ -330,6 +347,7 @@ class ViewChat extends HTMLElement {
     backBtn.addEventListener("click", () => {
       // Stop session if active
       if (this.audioStreamer) this.audioStreamer.stop();
+      if (this.videoStreamer) this.videoStreamer.stop();
       if (this.client) this.client.disconnect();
       if (this.audioPlayer) this.audioPlayer.interrupt();
 
@@ -358,6 +376,7 @@ class ViewChat extends HTMLElement {
     this.client = new GeminiLiveAPI();
     this.audioStreamer = new AudioStreamer(this.client);
     this.audioPlayer = new AudioPlayer();
+    this.videoStreamer = new VideoStreamer(this.client);
 
     // Define Mission Complete Tool
     const completeMissionTool = new FunctionCallDefinition(
@@ -625,6 +644,18 @@ When the user has successfully achieved the mission objective declared in the sc
           // 2. Start Audio Stream
           console.log("🎤 [App] Starting audio stream...");
           await this.audioStreamer.start();
+
+          // Start webcam stream for Gemini vision + PiP display
+          try {
+            await this.videoStreamer.start({ fps: 1, width: 640, height: 480 });
+            const pipEl = this.querySelector("#webcam-pip");
+            if (pipEl && this.videoStreamer.mediaStream) {
+              pipEl.srcObject = this.videoStreamer.mediaStream;
+              pipEl.style.display = "block";
+            }
+          } catch (e) {
+            console.warn("⚠️ [App] Camera not available, continuing without video:", e);
+          }
 
           // Connect User Visualizer
           if (this.audioStreamer.audioContext && this.audioStreamer.source) {

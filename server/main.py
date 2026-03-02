@@ -274,10 +274,13 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
                             await video_input_queue.put(image_data)
                             continue
                         elif isinstance(payload, dict) and "realtime_input" in payload:
-                             # Forward realtime input (audio/video chunks)
-                             # The SDK JS sends 'realtime_input' for generic media chunks
-                             # For now we handle simpler case or adapt GeminiLive class
-                             pass
+                            # Extract image frames and route to video queue
+                            media_chunks = payload["realtime_input"].get("media_chunks", [])
+                            for chunk in media_chunks:
+                                if chunk.get("mime_type") == "image/jpeg":
+                                    image_data = base64.b64decode(chunk["data"])
+                                    await video_input_queue.put(image_data)
+                            continue
                     except json.JSONDecodeError:
                         pass
                     
